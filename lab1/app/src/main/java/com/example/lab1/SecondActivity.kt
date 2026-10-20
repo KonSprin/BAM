@@ -1,5 +1,6 @@
 package com.example.lab1
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.enableEdgeToEdge
@@ -15,6 +16,7 @@ class SecondActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d("BAM", "SecondActivity onCreate")
+        startService(Intent(this, ActivityService::class.java))
         enableEdgeToEdge()
 
         binding = ActivitySecondBinding.inflate(layoutInflater)
@@ -50,6 +52,7 @@ class SecondActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        stopService(Intent(this, ActivityService::class.java))
         super.onDestroy()
         Log.d("BAM", "SecondActivity onDestroy")
     }
