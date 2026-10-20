@@ -1,12 +1,14 @@
 package com.example.lab1
 
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.content.ContextCompat
 import androidx.navigation.findNavController
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.AppBarConfiguration
@@ -20,6 +22,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var binding: ActivityMainBinding
+    private val powerConnectionReceiver = PowerConnectionReceiver()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,6 +49,16 @@ class MainActivity : AppCompatActivity() {
         binding.fab.setOnClickListener {
             startActivity(Intent(this, SecondActivity::class.java))
         }
+
+        ContextCompat.registerReceiver(
+            this,
+            powerConnectionReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_POWER_CONNECTED)
+                addAction(Intent.ACTION_POWER_DISCONNECTED)
+            },
+            ContextCompat.RECEIVER_EXPORTED
+        )
     }
 
     override fun onStart() {
@@ -69,6 +82,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        unregisterReceiver(powerConnectionReceiver)
         super.onDestroy()
         Log.d("BAM", "MainActivity onDestroy")
     }
