@@ -11,6 +11,10 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Lab1">
+        <provider
+            android:name=".LabContentProvider"
+            android:authorities="com.example.lab1.provider"
+            android:exported="true" />
         <service
             android:name=".ActivityService"
             android:exported="false" />

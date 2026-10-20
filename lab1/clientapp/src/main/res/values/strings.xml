@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Lab 1 Client</string>
+    <string name="read_provider">Odczytaj dane z ContentProvider</string>
+    <string name="provider_not_read">Dane nie zostały jeszcze odczytane.</string>
+    <string name="provider_unavailable">ContentProvider jest niedostępny.</string>
+</resources>
