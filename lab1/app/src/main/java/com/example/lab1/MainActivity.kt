@@ -1,7 +1,8 @@
 package com.example.lab1
 
+import android.content.Intent
 import android.os.Bundle
-import com.google.android.material.snackbar.Snackbar
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
@@ -22,6 +23,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d("BAM", "MainActivity onCreate")
         enableEdgeToEdge()
 
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -41,11 +43,34 @@ class MainActivity : AppCompatActivity() {
         appBarConfiguration = AppBarConfiguration(navController.graph)
         setupActionBarWithNavController(navController, appBarConfiguration)
 
-        binding.fab.setOnClickListener { view ->
-            Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                .setAction("Action", null)
-                .setAnchorView(R.id.fab).show()
+        binding.fab.setOnClickListener {
+            startActivity(Intent(this, SecondActivity::class.java))
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        Log.d("BAM", "MainActivity onStart")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.d("BAM", "MainActivity onResume")
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Log.d("BAM", "MainActivity onPause")
+    }
+
+    override fun onStop() {
+        super.onStop()
+        Log.d("BAM", "MainActivity onStop")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.d("BAM", "MainActivity onDestroy")
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
