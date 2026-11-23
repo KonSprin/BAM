@@ -17,6 +17,7 @@
     <string name="encrypted_data_save_error">Nie udało się zaszyfrować i zapisać danych.</string>
     <string name="encrypted_file_not_found">Brak zapisanego pliku z zaszyfrowanymi danymi.</string>
     <string name="encrypted_data_load_error">Nie udało się odczytać lub odszyfrować danych.</string>
+    <string name="shared_storage_not_supported">Zapis w pamięci wspólnej wymaga Androida 10 lub nowszego.</string>
 
     <string name="lorem_ipsum">
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam in scelerisque sem. Mauris
