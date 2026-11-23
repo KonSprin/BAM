@@ -1,8 +1,10 @@
 package com.example.lab1
 
 import android.content.ContentValues
-import android.os.Bundle
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import android.os.Build
+import android.os.Bundle
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.fragment.app.Fragment
@@ -10,13 +12,16 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import com.example.lab1.databinding.FragmentFirstBinding
-import com.google.crypto.tink.Aead
-import com.google.crypto.tink.integration.android.AndroidKeystore
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 
 class FirstFragment : Fragment() {
 
     companion object {
-        private const val KEY_ALIAS = "file_encryption_tink_key"
+        private const val KEY_ALIAS = "file_encryption_master_key"
         private const val FILE_NAME = "tajne.bin"
         private const val PREFERENCES_NAME = "encrypted_file_preferences"
         private const val FILE_URI_KEY = "encrypted_file_uri"
@@ -49,11 +54,23 @@ class FirstFragment : Fragment() {
         }
     }
 
-    private fun getAead(): Aead {
-        if (!AndroidKeystore.hasKey(KEY_ALIAS)) {
-            AndroidKeystore.generateNewAes256GcmKey(KEY_ALIAS)
+    private fun getSecretKey(): SecretKey {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        if (!keyStore.containsAlias(KEY_ALIAS)) {
+            val spec = KeyGenParameterSpec.Builder(
+                KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .build()
+            KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
+                init(spec)
+                generateKey()
+            }
         }
-        return AndroidKeystore.getAead(KEY_ALIAS)
+        return (keyStore.getEntry(KEY_ALIAS, null) as KeyStore.SecretKeyEntry).secretKey
     }
 
     private fun saveEncryptedData() {
@@ -64,8 +81,10 @@ class FirstFragment : Fragment() {
 
         try {
             val plaintext = binding.inputEditText.text.toString().toByteArray(Charsets.UTF_8)
-            val associatedData = FILE_NAME.toByteArray(Charsets.UTF_8)
-            val encryptedData = getAead().encrypt(plaintext, associatedData)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
+                init(Cipher.ENCRYPT_MODE, getSecretKey())
+            }
+            val encryptedData = cipher.doFinal(plaintext)
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, FILE_NAME)
                 put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
@@ -78,6 +97,8 @@ class FirstFragment : Fragment() {
 
             try {
                 resolver.openOutputStream(uri)?.use { output ->
+                    output.write(cipher.iv.size)
+                    output.write(cipher.iv)
                     output.write(encryptedData)
                 } ?: error("Nie udało się otworzyć pliku do zapisu")
                 values.clear()
@@ -103,11 +124,24 @@ class FirstFragment : Fragment() {
                 return
             }
 
-            val associatedData = FILE_NAME.toByteArray(Charsets.UTF_8)
-            val encryptedData = requireContext().contentResolver.openInputStream(
+            val decryptedData = requireContext().contentResolver.openInputStream(
                 android.net.Uri.parse(fileUri)
-            )?.use { input -> input.readBytes() } ?: error("Nie udało się otworzyć pliku do odczytu")
-            val decryptedData = getAead().decrypt(encryptedData, associatedData)
+            )?.use { input ->
+                val ivSize = input.read()
+                require(ivSize in 1..32) { "Nieprawidłowy rozmiar IV" }
+                val iv = ByteArray(ivSize)
+                var bytesRead = 0
+                while (bytesRead < ivSize) {
+                    val read = input.read(iv, bytesRead, ivSize - bytesRead)
+                    require(read != -1) { "Nie udało się odczytać IV" }
+                    bytesRead += read
+                }
+                val encryptedData = input.readBytes()
+                require(encryptedData.isNotEmpty()) { "Brak zaszyfrowanych danych" }
+                Cipher.getInstance("AES/GCM/NoPadding").apply {
+                    init(Cipher.DECRYPT_MODE, getSecretKey(), GCMParameterSpec(128, iv))
+                }.doFinal(encryptedData)
+            } ?: error("Nie udało się otworzyć pliku do odczytu")
             binding.outputTextView.text = decryptedData.toString(Charsets.UTF_8)
         } catch (exception: Exception) {
             binding.outputTextView.text = getString(R.string.encrypted_data_load_error)
