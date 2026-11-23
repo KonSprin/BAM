@@ -20,6 +20,13 @@ android {
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = true      // shrinking + obfuscation + optimization (R8)
+            isShrinkResources = true    // usuwanie nieużywanych zasobów (obrazki, layouty)
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             optimization {
                 enable = true
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
