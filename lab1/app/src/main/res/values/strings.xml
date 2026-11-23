@@ -9,15 +9,12 @@
     <string name="second_activity_title">Druga aktywność</string>
     <string name="second_activity_message">To jest druga aktywność</string>
     <string name="back">Wróć</string>
-    <string name="input_hint">Informacja do zaszyfrowania</string>
     <string name="save">Zapisz</string>
     <string name="load">Odczytaj</string>
-    <string name="output_placeholder">Odszyfrowana informacja pojawi się tutaj.</string>
-    <string name="encrypted_data_saved">Zaszyfrowane dane zapisano.</string>
-    <string name="encrypted_data_save_error">Nie udało się zaszyfrować i zapisać danych.</string>
-    <string name="encrypted_file_not_found">Brak zapisanego pliku z zaszyfrowanymi danymi.</string>
-    <string name="encrypted_data_load_error">Nie udało się odczytać lub odszyfrować danych.</string>
-    <string name="shared_storage_not_supported">Zapis w pamięci wspólnej wymaga Androida 10 lub nowszego.</string>
+    <string name="logcat_instruction">Każde szyfrowanie i odszyfrowanie wymaga potwierdzenia PIN-em. Odszyfrowana informacja jest dostępna w Logcat pod tagiem EncryptedFile.</string>
+    <string name="authentication_title">Potwierdź tożsamość</string>
+    <string name="authentication_encrypt_reason">PIN jest wymagany do zaszyfrowania danych.</string>
+    <string name="authentication_decrypt_reason">PIN jest wymagany do odszyfrowania danych.</string>
 
     <string name="lorem_ipsum">
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam in scelerisque sem. Mauris

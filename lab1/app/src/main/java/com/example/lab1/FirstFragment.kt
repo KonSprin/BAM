@@ -1,17 +1,19 @@
 package com.example.lab1
 
-import android.content.ContentValues
+import android.os.Bundle
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import android.os.Build
-import android.os.Bundle
-import android.provider.MediaStore
-import android.widget.Toast
+import android.util.Log
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import com.example.lab1.databinding.FragmentFirstBinding
+import java.io.File
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -21,10 +23,10 @@ import javax.crypto.spec.GCMParameterSpec
 class FirstFragment : Fragment() {
 
     companion object {
-        private const val KEY_ALIAS = "file_encryption_master_key"
-        private const val FILE_NAME = "tajne.bin"
-        private const val PREFERENCES_NAME = "encrypted_file_preferences"
-        private const val FILE_URI_KEY = "encrypted_file_uri"
+        private const val KEY_ALIAS = "file_encryption_authenticated_key"
+        private const val FILE_NAME = "tajne_manual.txt"
+        private const val SECRET_TEXT = "To jest zaszyfrowana informacja."
+        private const val LOG_TAG = "EncryptedFile"
     }
 
     private var _binding: FragmentFirstBinding? = null
@@ -46,12 +48,8 @@ class FirstFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.saveButton.setOnClickListener {
-            saveEncryptedData()
-        }
-        binding.loadButton.setOnClickListener {
-            loadEncryptedData()
-        }
+        binding.saveButton.setOnClickListener { saveEncryptedData() }
+        binding.loadButton.setOnClickListener { loadEncryptedData() }
     }
 
     private fun getSecretKey(): SecretKey {
@@ -64,6 +62,11 @@ class FirstFragment : Fragment() {
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setKeySize(256)
+                .setUserAuthenticationRequired(true)
+                .setUserAuthenticationParameters(
+                    0,
+                    KeyProperties.AUTH_DEVICE_CREDENTIAL
+                )
                 .build()
             KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
                 init(spec)
@@ -74,59 +77,32 @@ class FirstFragment : Fragment() {
     }
 
     private fun saveEncryptedData() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            Toast.makeText(requireContext(), R.string.shared_storage_not_supported, Toast.LENGTH_LONG).show()
-            return
-        }
-
         try {
-            val plaintext = binding.inputEditText.text.toString().toByteArray(Charsets.UTF_8)
+            requireApi30()
+            val plaintext = SECRET_TEXT.toByteArray(Charsets.UTF_8)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
                 init(Cipher.ENCRYPT_MODE, getSecretKey())
             }
-            val encryptedData = cipher.doFinal(plaintext)
-            val values = ContentValues().apply {
-                put(MediaStore.Downloads.DISPLAY_NAME, FILE_NAME)
-                put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
-                put(MediaStore.Downloads.RELATIVE_PATH, "Download/")
-                put(MediaStore.Downloads.IS_PENDING, 1)
-            }
-            val resolver = requireContext().contentResolver
-            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                ?: error("Nie udało się utworzyć pliku")
-
-            try {
-                resolver.openOutputStream(uri)?.use { output ->
-                    output.write(cipher.iv.size)
-                    output.write(cipher.iv)
+            authenticate(cipher, getString(R.string.authentication_encrypt_reason)) { authenticatedCipher ->
+                val encryptedData = authenticatedCipher.doFinal(plaintext)
+                File(requireContext().filesDir, FILE_NAME).outputStream().use { output ->
+                    output.write(authenticatedCipher.iv.size)
+                    output.write(authenticatedCipher.iv)
                     output.write(encryptedData)
-                } ?: error("Nie udało się otworzyć pliku do zapisu")
-                values.clear()
-                values.put(MediaStore.Downloads.IS_PENDING, 0)
-                resolver.update(uri, values, null, null)
-                encryptedFilePreferences().edit().putString(FILE_URI_KEY, uri.toString()).apply()
-            } catch (exception: Exception) {
-                resolver.delete(uri, null, null)
-                throw exception
+                }
+                Log.d(LOG_TAG, "Zaszyfrowane dane zapisano")
             }
-
-            Toast.makeText(requireContext(), R.string.encrypted_data_saved, Toast.LENGTH_SHORT).show()
         } catch (exception: Exception) {
-            Toast.makeText(requireContext(), R.string.encrypted_data_save_error, Toast.LENGTH_LONG).show()
+            Log.e(LOG_TAG, "Nie udało się zaszyfrować i zapisać danych", exception)
         }
     }
 
     private fun loadEncryptedData() {
         try {
-            val fileUri = encryptedFilePreferences().getString(FILE_URI_KEY, null)
-            if (fileUri == null) {
-                binding.outputTextView.text = getString(R.string.encrypted_file_not_found)
-                return
-            }
-
-            val decryptedData = requireContext().contentResolver.openInputStream(
-                android.net.Uri.parse(fileUri)
-            )?.use { input ->
+            requireApi30()
+            val file = File(requireContext().filesDir, FILE_NAME)
+            require(file.exists()) { "Brak zaszyfrowanego pliku" }
+            val (iv, encryptedData) = file.inputStream().use { input ->
                 val ivSize = input.read()
                 require(ivSize in 1..32) { "Nieprawidłowy rozmiar IV" }
                 val iv = ByteArray(ivSize)
@@ -138,20 +114,51 @@ class FirstFragment : Fragment() {
                 }
                 val encryptedData = input.readBytes()
                 require(encryptedData.isNotEmpty()) { "Brak zaszyfrowanych danych" }
-                Cipher.getInstance("AES/GCM/NoPadding").apply {
-                    init(Cipher.DECRYPT_MODE, getSecretKey(), GCMParameterSpec(128, iv))
-                }.doFinal(encryptedData)
-            } ?: error("Nie udało się otworzyć pliku do odczytu")
-            binding.outputTextView.text = decryptedData.toString(Charsets.UTF_8)
+                iv to encryptedData
+            }
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
+                init(Cipher.DECRYPT_MODE, getSecretKey(), GCMParameterSpec(128, iv))
+            }
+            authenticate(cipher, getString(R.string.authentication_decrypt_reason)) { authenticatedCipher ->
+                val decryptedData = authenticatedCipher.doFinal(encryptedData)
+                Log.d(LOG_TAG, "Odszyfrowana informacja: ${decryptedData.toString(Charsets.UTF_8)}")
+            }
         } catch (exception: Exception) {
-            binding.outputTextView.text = getString(R.string.encrypted_data_load_error)
+            Log.e(LOG_TAG, "Nie udało się odczytać lub odszyfrować danych", exception)
         }
     }
 
-    private fun encryptedFilePreferences() = requireContext().getSharedPreferences(
-        PREFERENCES_NAME,
-        android.content.Context.MODE_PRIVATE
-    )
+    private fun authenticate(cipher: Cipher, reason: String, onSuccess: (Cipher) -> Unit) {
+        val executor = ContextCompat.getMainExecutor(requireContext())
+        val prompt = BiometricPrompt(this, executor, object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                super.onAuthenticationSucceeded(result)
+                try {
+                    result.cryptoObject?.cipher?.let(onSuccess)
+                        ?: Log.e(LOG_TAG, "Brak odblokowanego obiektu Cipher")
+                } catch (exception: Exception) {
+                    Log.e(LOG_TAG, "Operacja na uwierzytelnionym kluczu nie powiodła się", exception)
+                }
+            }
+
+            override fun onAuthenticationError(errorCode: Int, errorMessage: CharSequence) {
+                super.onAuthenticationError(errorCode, errorMessage)
+                Log.e(LOG_TAG, "Autoryzacja anulowana lub nieudana: $errorMessage")
+            }
+        })
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle(getString(R.string.authentication_title))
+            .setSubtitle(reason)
+            .setAllowedAuthenticators(BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+            .build()
+        prompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(cipher))
+    }
+
+    private fun requireApi30() {
+        require(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            "Autoryzacja PIN-em wymaga Androida 11 (API 30) lub nowszego"
+        }
+    }
 
     override fun onDestroyView() {
         super.onDestroyView()
